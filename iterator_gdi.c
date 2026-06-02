@@ -155,6 +155,14 @@ enum {
     IDM_RESET_ALL,
     IDM_CLOSE_THIS,
     IDM_EXIT_APP,
+    IDM_PARAM_STEP_LEFT,
+    IDM_PARAM_STEP_RIGHT,
+    IDM_PARAM_STEP_FINE_LEFT,
+    IDM_PARAM_STEP_FINE_RIGHT,
+    IDM_PARAM_STEP_COARSE_LEFT,
+    IDM_PARAM_STEP_COARSE_RIGHT,
+    IDM_FOCUS_NEXT,
+    IDM_FOCUS_PREV,
 
     IDM_BIF_MODE_PARAM = 2001,
     IDM_BIF_MODE_ZOOM,
@@ -194,6 +202,7 @@ static HFONT g_font_small;
 static HFONT g_font_mono;
 static HFONT g_font_mono_small;
 static HFONT g_font_title;
+static HACCEL g_accel;
 static uint64_t g_bif_rev = 1;
 static uint64_t g_man_rev = 1;
 static int g_live_windows = 0;
@@ -1397,6 +1406,22 @@ static void set_param(double v)
     }
 }
 
+static void step_param_by_view_fraction(double fraction)
+{
+    double span = g_state.view_max - g_state.view_min;
+    double delta;
+    double min_step;
+    if (!finite_double(span) || span <= 0.0)
+        span = family_full_max(g_state.fam) - family_full_min(g_state.fam);
+    if (!finite_double(span) || span <= 0.0)
+        return;
+    delta = span * fraction;
+    min_step = double_step_around(g_state.param);
+    if (fabs(delta) < min_step)
+        delta = fraction < 0.0 ? -min_step : min_step;
+    set_param(g_state.param + delta);
+}
+
 static int current_period(void)
 {
     return detect_period(g_state.fam, g_state.param, g_state.x0, 64, 3000, 1e-7);
@@ -2329,6 +2354,24 @@ static void tile_windows(GraphWindow *origin)
     }
 }
 
+static void focus_graph_relative(GraphWindow *origin, int dir)
+{
+    int start = origin ? (int)origin->kind : 0;
+    int i;
+    for (i = 1; i <= GRAPH_COUNT; ++i) {
+        int idx = (start + dir * i + GRAPH_COUNT * 2) % GRAPH_COUNT;
+        HWND hwnd;
+        show_graph_window((GraphKind)idx);
+        hwnd = g_windows[idx].hwnd;
+        if (hwnd) {
+            ShowWindow(hwnd, SW_SHOWNORMAL);
+            SetForegroundWindow(hwnd);
+            SetFocus(hwnd);
+            return;
+        }
+    }
+}
+
 static void append_checked(HMENU menu, UINT id, const char *label, int checked)
 {
     AppendMenuA(menu, MF_STRING | (checked ? MF_CHECKED : 0), id, label);
@@ -2340,9 +2383,9 @@ static void show_context_menu(GraphWindow *gw, POINT pt)
     HMENU fam = CreatePopupMenu();
     char period_label[64];
 
-    append_checked(fam, IDM_FAMILY_LOGISTIC, "Logistic family", g_state.fam == FAM_LOGISTIC);
-    append_checked(fam, IDM_FAMILY_TENT, "Tent family", g_state.fam == FAM_TENT);
-    append_checked(fam, IDM_FAMILY_SINE, "Sine family", g_state.fam == FAM_SINE);
+    append_checked(fam, IDM_FAMILY_LOGISTIC, "Logistic family\tCtrl+1", g_state.fam == FAM_LOGISTIC);
+    append_checked(fam, IDM_FAMILY_TENT, "Tent family\tCtrl+2", g_state.fam == FAM_TENT);
+    append_checked(fam, IDM_FAMILY_SINE, "Sine family\tCtrl+3", g_state.fam == FAM_SINE);
     AppendMenuA(menu, MF_POPUP, (UINT_PTR)fam, "Family");
     AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
 
@@ -2351,9 +2394,9 @@ static void show_context_menu(GraphWindow *gw, POINT pt)
         append_checked(menu, IDM_BIF_MODE_PARAM, "Drag sets parameter", gw->drag_mode == DRAG_PARAM);
         append_checked(menu, IDM_BIF_MODE_ZOOM, "Drag aspect box-zooms 2D", gw->drag_mode == DRAG_ZOOM);
         AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
-        append_checked(menu, IDM_BIF_LYAP, "Lyapunov overlay", g_state.lyap_overlay);
-        append_checked(menu, IDM_BIF_PERIOD_COLORS, "Period spectrum; chaos black", g_state.period_colors);
-        AppendMenuA(menu, MF_STRING, IDM_BIF_RESET_VIEW, "Reset bifurcation view");
+        append_checked(menu, IDM_BIF_LYAP, "Lyapunov overlay\tL", g_state.lyap_overlay);
+        append_checked(menu, IDM_BIF_PERIOD_COLORS, "Period spectrum; chaos black\tP", g_state.period_colors);
+        AppendMenuA(menu, MF_STRING, IDM_BIF_RESET_VIEW, "Reset bifurcation view\tBackspace");
         {
             HMENU recent = CreatePopupMenu();
             IteratorMruBifViewRecord recs[ITERATOR_MRU_BIF_VIEW_MAX];
@@ -2376,20 +2419,20 @@ static void show_context_menu(GraphWindow *gw, POINT pt)
         break;
     case GRAPH_COB:
         append_checked(menu, IDM_COB_MODE_SEED, "Drag sets x0", gw->drag_mode == DRAG_SEED);
-        AppendMenuA(menu, MF_STRING, IDM_COB_RESEED, "New x0");
+        AppendMenuA(menu, MF_STRING, IDM_COB_RESEED, "New x0\tSpace");
         append_checked(menu, IDM_COB_TRANSIENT, "Show transient", g_state.show_transient);
         break;
     case GRAPH_MAN:
         append_checked(menu, IDM_MAN_MODE_PARAM, "Drag sets parameter", gw->drag_mode == DRAG_PARAM);
-        AppendMenuA(menu, MF_STRING, IDM_MAN_REBUILD, "Rebuild period map");
+        AppendMenuA(menu, MF_STRING, IDM_MAN_REBUILD, "Rebuild period map\tF5");
         break;
     case GRAPH_LAB:
         append_checked(menu, IDM_LAB_MODE_PARAM, "Drag sets parameter", gw->drag_mode == DRAG_PARAM);
         snprintf(period_label, sizeof(period_label), "Search period: %d", g_state.find_period);
         AppendMenuA(menu, MF_STRING | MF_GRAYED, 0, period_label);
-        AppendMenuA(menu, MF_STRING, IDM_LAB_PERIOD_DEC, "Search period -");
-        AppendMenuA(menu, MF_STRING, IDM_LAB_PERIOD_INC, "Search period +");
-        AppendMenuA(menu, MF_STRING, IDM_LAB_FIND, "Scan + Newton refine");
+        AppendMenuA(menu, MF_STRING, IDM_LAB_PERIOD_DEC, "Search period -\t-");
+        AppendMenuA(menu, MF_STRING, IDM_LAB_PERIOD_INC, "Search period +\t+");
+        AppendMenuA(menu, MF_STRING, IDM_LAB_FIND, "Scan + Newton refine\tEnter");
         AppendMenuA(menu, MF_STRING, IDM_LAB_FEIG, "Estimate Feigenbaum delta");
         {
             HMENU recent = CreatePopupMenu();
@@ -2441,9 +2484,14 @@ static void show_context_menu(GraphWindow *gw, POINT pt)
     }
 
     AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(menu, MF_STRING, IDM_SHOW_ALL, "Show all graph windows");
-    AppendMenuA(menu, MF_STRING, IDM_TILE_WINDOWS, "Tile graph windows");
-    AppendMenuA(menu, MF_STRING, IDM_RESET_ALL, "Reset all parameters");
+    AppendMenuA(menu, MF_STRING, IDM_PARAM_STEP_LEFT, "Step parameter left\tLeft");
+    AppendMenuA(menu, MF_STRING, IDM_PARAM_STEP_RIGHT, "Step parameter right\tRight");
+    AppendMenuA(menu, MF_STRING | MF_GRAYED, 0, "Ctrl+Left/Right fine; Shift coarse");
+    AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuA(menu, MF_STRING, IDM_SHOW_ALL, "Show all graph windows\tA");
+    AppendMenuA(menu, MF_STRING, IDM_TILE_WINDOWS, "Tile graph windows\tT");
+    AppendMenuA(menu, MF_STRING, IDM_RESET_ALL, "Reset all parameters\tCtrl+R");
+    AppendMenuA(menu, MF_STRING, IDM_FOCUS_NEXT, "Next graph window\tTab");
     AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(menu, MF_STRING, IDM_CLOSE_THIS, "Close this graph");
     AppendMenuA(menu, MF_STRING, IDM_EXIT_APP, "Exit iterator");
@@ -2521,6 +2569,30 @@ static void command_from_window(GraphWindow *gw, int id)
     case IDM_RESET_ALL:
         reset_state(g_state.fam);
         invalidate_all();
+        break;
+    case IDM_PARAM_STEP_LEFT:
+        step_param_by_view_fraction(-0.01);
+        break;
+    case IDM_PARAM_STEP_RIGHT:
+        step_param_by_view_fraction(0.01);
+        break;
+    case IDM_PARAM_STEP_FINE_LEFT:
+        step_param_by_view_fraction(-0.001);
+        break;
+    case IDM_PARAM_STEP_FINE_RIGHT:
+        step_param_by_view_fraction(0.001);
+        break;
+    case IDM_PARAM_STEP_COARSE_LEFT:
+        step_param_by_view_fraction(-0.05);
+        break;
+    case IDM_PARAM_STEP_COARSE_RIGHT:
+        step_param_by_view_fraction(0.05);
+        break;
+    case IDM_FOCUS_NEXT:
+        focus_graph_relative(gw, 1);
+        break;
+    case IDM_FOCUS_PREV:
+        focus_graph_relative(gw, -1);
         break;
     case IDM_CLOSE_THIS:
         DestroyWindow(gw->hwnd);
@@ -2959,6 +3031,46 @@ static void show_graph_window(GraphKind kind)
     }
 }
 
+static HACCEL create_app_accelerators(void)
+{
+    ACCEL a[] = {
+        {FVIRTKEY, VK_LEFT, IDM_PARAM_STEP_LEFT},
+        {FVIRTKEY, VK_RIGHT, IDM_PARAM_STEP_RIGHT},
+        {FVIRTKEY | FCONTROL, VK_LEFT, IDM_PARAM_STEP_FINE_LEFT},
+        {FVIRTKEY | FCONTROL, VK_RIGHT, IDM_PARAM_STEP_FINE_RIGHT},
+        {FVIRTKEY | FSHIFT, VK_LEFT, IDM_PARAM_STEP_COARSE_LEFT},
+        {FVIRTKEY | FSHIFT, VK_RIGHT, IDM_PARAM_STEP_COARSE_RIGHT},
+        {FVIRTKEY, VK_NEXT, IDM_PARAM_STEP_COARSE_LEFT},
+        {FVIRTKEY, VK_PRIOR, IDM_PARAM_STEP_COARSE_RIGHT},
+
+        {FVIRTKEY, VK_OEM_MINUS, IDM_LAB_PERIOD_DEC},
+        {FVIRTKEY | FSHIFT, VK_OEM_MINUS, IDM_LAB_PERIOD_DEC},
+        {FVIRTKEY, VK_SUBTRACT, IDM_LAB_PERIOD_DEC},
+        {FVIRTKEY, VK_OEM_PLUS, IDM_LAB_PERIOD_INC},
+        {FVIRTKEY | FSHIFT, VK_OEM_PLUS, IDM_LAB_PERIOD_INC},
+        {FVIRTKEY, VK_ADD, IDM_LAB_PERIOD_INC},
+
+        {FVIRTKEY, VK_SPACE, IDM_COB_RESEED},
+        {FVIRTKEY, VK_RETURN, IDM_LAB_FIND},
+        {FVIRTKEY, VK_F5, IDM_MAN_REBUILD},
+        {FVIRTKEY, VK_BACK, IDM_BIF_RESET_VIEW},
+
+        {FVIRTKEY, 'L', IDM_BIF_LYAP},
+        {FVIRTKEY, 'P', IDM_BIF_PERIOD_COLORS},
+        {FVIRTKEY, 'A', IDM_SHOW_ALL},
+        {FVIRTKEY, 'T', IDM_TILE_WINDOWS},
+        {FVIRTKEY | FCONTROL, 'R', IDM_RESET_ALL},
+
+        {FVIRTKEY | FCONTROL, '1', IDM_FAMILY_LOGISTIC},
+        {FVIRTKEY | FCONTROL, '2', IDM_FAMILY_TENT},
+        {FVIRTKEY | FCONTROL, '3', IDM_FAMILY_SINE},
+
+        {FVIRTKEY, VK_TAB, IDM_FOCUS_NEXT},
+        {FVIRTKEY | FSHIFT, VK_TAB, IDM_FOCUS_PREV}
+    };
+    return CreateAcceleratorTableA(a, (int)ARRAYSIZE(a));
+}
+
 static int register_graph_class(void)
 {
     WNDCLASSEXA wc;
@@ -2994,6 +3106,7 @@ int APIENTRY WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 
     if (!register_graph_class())
         return 1;
+    g_accel = create_app_accelerators();
 
     if (g_have_start_session) {
         int i;
@@ -3004,10 +3117,14 @@ int APIENTRY WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     }
 
     while (GetMessageA(&msg, NULL, 0, 0) > 0) {
+        if (g_accel && msg.hwnd && TranslateAcceleratorA(msg.hwnd, g_accel, &msg))
+            continue;
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
 
+    if (g_accel)
+        DestroyAcceleratorTable(g_accel);
     destroy_fonts();
     return (int)msg.wParam;
 }

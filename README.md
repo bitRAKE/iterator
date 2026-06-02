@@ -18,7 +18,7 @@ The script builds `iterator_gdi.exe` from the source files in this directory usi
 iterator_gdi.exe
 ```
 
-Right-click any graph window for options. Left-click drag follows the active mode for that graph. Hover over bifurcation, cobweb, or quadratic bridge plots for a live crosshair numeric readout.
+Right-click any graph window for options. Left-click drag follows the active mode for that graph. Hover over bifurcation, cobweb, or quadratic bridge plots for a live crosshair numeric readout. Keyboard shortcuts are listed in the usage guide.
 
 ## Documentation
 

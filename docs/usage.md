@@ -39,6 +39,25 @@ Right-click any window for options. Left-click drag follows that window's curren
 
 Hover inside a graph plot to inspect it without changing state. Bifurcation reports parameter, `x`, detected period, and Lyapunov value. Cobweb reports `x_n` and `f(x_n)`. Quadratic Bridge reports complex `c` and the inferred real-axis logistic `r` when the hovered real coordinate lies on the logistic bridge.
 
+## Keyboard Shortcuts
+
+- `Left` / `Right`: step the shared family parameter through the current bifurcation view.
+- `Ctrl+Left` / `Ctrl+Right`: fine parameter step.
+- `Shift+Left` / `Shift+Right`: coarse parameter step.
+- `Page Down` / `Page Up`: coarse parameter step down or up.
+- `+` / `-`: increase or decrease the Cycle Lab search period.
+- `Space`: choose a new `x0`.
+- `Enter`: scan and refine cycles for the current Cycle Lab period.
+- `L`: toggle the Lyapunov overlay.
+- `P`: toggle period spectrum coloring.
+- `Backspace`: reset the bifurcation view.
+- `F5`: rebuild the Quadratic Bridge period map.
+- `T`: tile graph windows on the active monitor.
+- `A`: show all graph windows.
+- `Tab` / `Shift+Tab`: move focus to the next or previous graph window.
+- `Ctrl+1` / `Ctrl+2` / `Ctrl+3`: choose logistic, tent, or sine family.
+- `Ctrl+R`: reset all shared parameters.
+
 ## Academic Discovery Workflow
 
 ### 1. Choose A Map Family
