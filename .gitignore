@@ -1,0 +1,15 @@
+# Build outputs produced by iterator_gdi.cmd / local Win32 toolchains
+*.exe
+*.obj
+*.pdb
+*.ilk
+
+# Runtime state and exports are local artifacts by default (see README.md)
+state/
+exports/
+
+# Editor/OS noise
+.vs/
+*.user
+.DS_Store
+Thumbs.db
