@@ -26,7 +26,7 @@ See [docs/usage.md](docs/usage.md).
 
 ## Source Sharing
 
-The source set is the C files, build script, README, and documentation. Runtime data and generated exports are local artifacts unless deliberately shared.
+The source set is the C files, build script, README, documentation, and repository hygiene files such as `.gitignore`. Runtime data and generated exports are local artifacts unless deliberately shared.
 
 ## Generated Local Files
 
