@@ -3110,8 +3110,15 @@ int APIENTRY WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 
     if (g_have_start_session) {
         int i;
-        for (i = 0; i < GRAPH_COUNT; ++i)
-            show_graph_window((GraphKind)i);
+        int shown = 0;
+        for (i = 0; i < GRAPH_COUNT && i < ITERATOR_MRU_GRAPH_COUNT; ++i) {
+            if (g_start_session.windows[i].visible) {
+                show_graph_window((GraphKind)i);
+                ++shown;
+            }
+        }
+        if (shown == 0)
+            tile_windows(NULL);
     } else {
         tile_windows(NULL);
     }
