@@ -77,9 +77,10 @@ int IteratorMruLoadList(const char *name, uint32_t magic, uint32_t item_size,
         return 0;
     }
 
-    count = (int)h.count;
-    if (count > max_items)
+    if (h.count > (uint32_t)max_items)
         count = max_items;
+    else
+        count = (int)h.count;
     if (count > 0 && fread(items, item_size, (size_t)count, f) != (size_t)count) {
         fclose(f);
         return 0;
@@ -97,7 +98,7 @@ int IteratorMruSaveList(const char *name, uint32_t magic, uint32_t item_size,
     IteratorMruHeader h;
     FILE *f;
 
-    if (count < 0 || item_size == 0)
+    if (count < 0 || item_size == 0 || (count > 0 && !items))
         return 0;
 
     make_state_path(path, sizeof(path), name);
