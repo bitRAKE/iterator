@@ -503,6 +503,7 @@ static int dib_resize(Dib *d, int w, int h)
         DeleteDC(d->dc);
         d->dc = NULL;
     }
+    d->old_bmp = NULL;
     if (d->bmp) {
         DeleteObject(d->bmp);
         d->bmp = NULL;
@@ -522,11 +523,25 @@ static int dib_resize(Dib *d, int w, int h)
     screen = GetDC(NULL);
     d->bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, (void **)&d->bits, NULL, 0);
     ReleaseDC(NULL, screen);
-    if (!d->bmp || !d->bits)
+    if (!d->bmp || !d->bits) {
+        if (d->bmp) {
+            DeleteObject(d->bmp);
+            d->bmp = NULL;
+        }
+        d->bits = NULL;
+        d->w = 0;
+        d->h = 0;
         return 0;
+    }
     d->dc = CreateCompatibleDC(NULL);
-    if (!d->dc)
+    if (!d->dc) {
+        DeleteObject(d->bmp);
+        d->bmp = NULL;
+        d->bits = NULL;
+        d->w = 0;
+        d->h = 0;
         return 0;
+    }
     d->old_bmp = SelectObject(d->dc, d->bmp);
     return 1;
 }
