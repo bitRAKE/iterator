@@ -1286,6 +1286,7 @@ static void export_stable_logistic_r_bits(unsigned bits)
     FILE *inc;
     int hex_width;
     const char *directive;
+    int write_ok = 1;
 
     if (bits != 8 && bits != 16 && bits != 32 && bits != 52) {
         MessageBoxA(NULL, "Unsupported R bit depth.", "Iterator export", MB_OK | MB_ICONERROR);
@@ -1326,11 +1327,16 @@ static void export_stable_logistic_r_bits(unsigned bits)
     hex_width = (int)((bits + 3) / 4);
     directive = fixed_r_directive(bits);
 
-    fprintf(csv, "bits,R_dec,R_hex,r,period,multiplier,orbit\n");
-    fprintf(inc, "; iterator_gdi stable logistic R export\n");
-    fprintf(inc, "; R = floor((r / 4) * 2^%u), saturated to the Q0.%u mask\n", bits, bits);
-    fprintf(inc, "; Source: app-local state\\stable_cycles.mru\n\n");
-    fprintf(inc, "stable_logistic_R_q0_%u:\n", bits);
+    if (fprintf(csv, "bits,R_dec,R_hex,r,period,multiplier,orbit\n") < 0)
+        write_ok = 0;
+    if (fprintf(inc, "; iterator_gdi stable logistic R export\n") < 0)
+        write_ok = 0;
+    if (fprintf(inc, "; R = floor((r / 4) * 2^%u), saturated to the Q0.%u mask\n", bits, bits) < 0)
+        write_ok = 0;
+    if (fprintf(inc, "; Source: app-local state\\stable_cycles.mru\n\n") < 0)
+        write_ok = 0;
+    if (fprintf(inc, "stable_logistic_R_q0_%u:\n", bits) < 0)
+        write_ok = 0;
 
     for (i = 0; i < item_count; ++i) {
         int k;
@@ -1338,31 +1344,43 @@ static void export_stable_logistic_r_bits(unsigned bits)
             continue;
         ++unique_count;
 
-        fprintf(csv, "%u,%llu,0x%0*llX,%.17g,%d,%.17g,\"",
-                bits,
-                (unsigned long long)items[i].raw_r,
-                hex_width,
-                (unsigned long long)items[i].raw_r,
-                items[i].cycle.param,
-                items[i].cycle.period,
-                items[i].cycle.multiplier);
+        if (fprintf(csv, "%u,%llu,0x%0*llX,%.17g,%d,%.17g,\"",
+                    bits,
+                    (unsigned long long)items[i].raw_r,
+                    hex_width,
+                    (unsigned long long)items[i].raw_r,
+                    items[i].cycle.param,
+                    items[i].cycle.period,
+                    items[i].cycle.multiplier) < 0)
+            write_ok = 0;
         for (k = 0; k < items[i].cycle.point_count; ++k)
-            fprintf(csv, "%s%.17g", k ? " " : "", items[i].cycle.orbit[k]);
-        fprintf(csv, "\"\n");
+            if (fprintf(csv, "%s%.17g", k ? " " : "", items[i].cycle.orbit[k]) < 0)
+                write_ok = 0;
+        if (fprintf(csv, "\"\n") < 0)
+            write_ok = 0;
 
-        fprintf(inc, "  %s 0%0*llXh ; R=%llu r=%.17g period=%d |m|=%.6g\n",
-                directive,
-                hex_width,
-                (unsigned long long)items[i].raw_r,
-                (unsigned long long)items[i].raw_r,
-                items[i].cycle.param,
-                items[i].cycle.period,
-                fabs(items[i].cycle.multiplier));
+        if (fprintf(inc, "  %s 0%0*llXh ; R=%llu r=%.17g period=%d |m|=%.6g\n",
+                    directive,
+                    hex_width,
+                    (unsigned long long)items[i].raw_r,
+                    (unsigned long long)items[i].raw_r,
+                    items[i].cycle.param,
+                    items[i].cycle.period,
+                    fabs(items[i].cycle.multiplier)) < 0)
+            write_ok = 0;
     }
-    fprintf(inc, "stable_logistic_R_q0_%u_count = %d\n", bits, unique_count);
+    if (fprintf(inc, "stable_logistic_R_q0_%u_count = %d\n", bits, unique_count) < 0)
+        write_ok = 0;
 
-    fclose(csv);
-    fclose(inc);
+    if (fclose(csv) != 0)
+        write_ok = 0;
+    if (fclose(inc) != 0)
+        write_ok = 0;
+
+    if (!write_ok) {
+        MessageBoxA(NULL, "Could not finish writing export files.", "Iterator export", MB_OK | MB_ICONERROR);
+        return;
+    }
 
     snprintf(msg, sizeof(msg),
              "Exported %d unique Q0.%u logistic R values.\n\n%s\n%s",
